@@ -41,9 +41,9 @@ const fmtDate = (d) => {
   return months[parseInt(m)] + " '" + y.slice(2);
 };
 
-/* ── FRED fetch ── */
-async function fetchFRED(apiKey, seriesId, start = "2019-12-01") {
-  const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&observation_start=${start}&sort_order=asc`;
+/* ── FRED fetch (via serverless proxy) ── */
+async function fetchFRED(seriesId, start = "2019-12-01") {
+  const url = `/api/fred?series_id=${seriesId}&observation_start=${start}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`FRED error for ${seriesId}: ${res.status}`);
   const json = await res.json();
@@ -191,24 +191,21 @@ const ImpulseTooltip = ({ active, payload }) => {
 
 /* ══════ MAIN ══════ */
 export default function LiquidityDashboard() {
-  const envKey = import.meta.env.VITE_FRED_API_KEY || "";
-  const [apiKey, setApiKey] = useState(envKey);
-  const [keyInput, setKeyInput] = useState("");
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showBTC, setShowBTC] = useState(true);
   const [timeRange, setTimeRange] = useState("all");
 
-  const fetchAll = useCallback(async (key) => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [walcl, tga, totll, btc] = await Promise.all([
-        fetchFRED(key, "WALCL"),
-        fetchFRED(key, "WTREGEN"),
-        fetchFRED(key, "TOTLL"),
-        fetchFRED(key, "CBBTCUSD"),
+        fetchFRED("WALCL"),
+        fetchFRED("WTREGEN"),
+        fetchFRED("TOTLL"),
+        fetchFRED("CBBTCUSD"),
       ]);
       const impulse = buildImpulseData({ WALCL: walcl, WTREGEN: tga, TOTLL: totll, CBBTCUSD: btc });
       setData(impulse);
@@ -219,16 +216,8 @@ export default function LiquidityDashboard() {
     }
   }, []);
 
-  const handleSubmit = () => {
-    if (keyInput.trim()) {
-      setApiKey(keyInput.trim());
-      fetchAll(keyInput.trim());
-    }
-  };
-
-  // Auto-fetch on mount if env key is set
   useEffect(() => {
-    if (envKey) fetchAll(envKey);
+    fetchAll();
   }, []);
 
   const filtered = useMemo(() => {
@@ -253,66 +242,6 @@ export default function LiquidityDashboard() {
     const step = Math.ceil(filtered.length / 150);
     return filtered.filter((_, i) => i % step === 0 || i === filtered.length - 1);
   }, [filtered]);
-
-  /* ── API key entry ── */
-  if (!apiKey) {
-    return (
-      <div style={{
-        minHeight: "100vh",
-        background: "linear-gradient(170deg, #0B0F14 0%, #131A24 50%, #0B0F14 100%)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: "'IBM Plex Mono', monospace", padding: 20,
-      }}>
-        <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@500;700&display=swap" rel="stylesheet" />
-        <div style={{
-          background: "rgba(255,255,255,0.02)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          borderRadius: 16, padding: "52px 40px",
-          maxWidth: 440, width: "100%", textAlign: "center",
-        }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 10,
-            background: "linear-gradient(135deg, #4FC3F7, #29B6F6)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            margin: "0 auto 22px", fontSize: 20, color: "#0B0F14", fontWeight: 700,
-          }}>◈</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#E2E8EE", fontFamily: "'DM Sans', sans-serif", marginBottom: 6 }}>
-            Liquidity Impulse Monitor
-          </div>
-          <div style={{ fontSize: 12, color: "#5A6B7D", marginBottom: 32, lineHeight: 1.7 }}>
-            4-week rolling: Δ Fed BS + (−Δ TGA) + Δ Loans &amp; Leases
-          </div>
-          <div style={{ fontSize: 10, color: "#5A6B7D", marginBottom: 8, textAlign: "left", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            FRED API Key
-          </div>
-          <input
-            type="text" value={keyInput}
-            onChange={(e) => setKeyInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            placeholder="Paste your key from fred.stlouisfed.org"
-            style={{
-              width: "100%", padding: "13px 16px",
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 8, color: "#E2E8EE", fontSize: 13,
-              fontFamily: "'IBM Plex Mono', monospace",
-              outline: "none", boxSizing: "border-box", marginBottom: 14,
-            }}
-          />
-          <button onClick={handleSubmit} style={{
-            width: "100%", padding: "13px",
-            background: "linear-gradient(135deg, #4FC3F7, #29B6F6)",
-            border: "none", borderRadius: 8, color: "#0B0F14",
-            fontSize: 13, fontWeight: 700, cursor: "pointer",
-            fontFamily: "'IBM Plex Mono', monospace", letterSpacing: "0.05em",
-          }}>LOAD DATA</button>
-          <div style={{ fontSize: 11, color: "#3D4D5D", marginTop: 18, lineHeight: 1.5 }}>
-            Free at <span style={{ color: "#5A6B7D" }}>fred.stlouisfed.org/docs/api</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   /* ── loading ── */
   if (loading) {
@@ -343,7 +272,7 @@ export default function LiquidityDashboard() {
       }}>
         <div style={{ color: "#EF5350", fontSize: 13, textAlign: "center" }}>
           <div style={{ marginBottom: 12 }}>Error: {error}</div>
-          <button onClick={() => { setApiKey(""); setError(null); }} style={{
+          <button onClick={() => { setError(null); fetchAll(); }} style={{
             background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
             color: "#8899AA", padding: "10px 24px", borderRadius: 6, cursor: "pointer",
             fontFamily: "'IBM Plex Mono', monospace", fontSize: 12,
