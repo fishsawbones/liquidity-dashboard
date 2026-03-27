@@ -35,7 +35,7 @@ Get a free FRED API key at: https://fred.stlouisfed.org/docs/api/api_key.html
 ## Local dev
 
 ```bash
-cp .env.example .env
+cp .env.example .env 
 # edit .env with your FRED key
 npm install
 npm run dev
